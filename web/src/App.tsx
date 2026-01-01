@@ -1,6 +1,7 @@
 import { useEffect, useState, useRef } from 'react';
 import init, { FluteEngine } from 'flyte_core';
 import './App.css';
+import { Toast, type ToastMessage } from './components/Toast';
 
 interface HoleData {
   id: number;
@@ -14,6 +15,7 @@ const PX_PER_CM = 15; // Increased scale for better visibility
 function App() {
   const [engine, setEngine] = useState<FluteEngine | null>(null);
   const [pitch, setPitch] = useState<number>(0);
+  const [toast, setToast] = useState<ToastMessage | null>(null);
 
   // Physics Parameters State
   const [tubeLength, setTubeLength] = useState<number>(60.0);
@@ -52,8 +54,10 @@ function App() {
     if (!engine) return;
     try {
       engine.set_physics_params(tubeLength, boreRadius, wallThickness);
-      // Trigger a recalc
-      const newPitch = engine.calculate_pitch(pitch);
+      // Trigger a recalc - we can use an internal guess or the last known pitch
+      // Passing 0 or a fixed value lets the engine use its robust guess
+      const newPitch = engine.calculate_pitch(440);
+      // eslint-disable-next-line react-hooks/set-state-in-effect
       if (newPitch > 20 && newPitch < 5000) setPitch(newPitch);
     } catch (e) {
       console.error("Error updating physics params:", e);
@@ -72,8 +76,9 @@ function App() {
 
       engine.set_holes(positions, radii, open);
 
-      const newPitch = engine.calculate_pitch(pitch);
+      const newPitch = engine.calculate_pitch(440);
       if (newPitch > 20 && newPitch < 5000) {
+        // eslint-disable-next-line react-hooks/set-state-in-effect
         setPitch(newPitch);
       }
     } catch (e) {
@@ -115,7 +120,7 @@ function App() {
       try {
         const h = holes[holeIndex];
         engine.update_hole(holeIndex, newPos, h.radius, h.open);
-        const newPitch = engine.calculate_pitch(pitch);
+        const newPitch = engine.calculate_pitch(440);
         if (newPitch > 20 && newPitch < 5000) setPitch(newPitch);
       } catch (err) {
         console.error("Crash during drag:", err);
@@ -166,12 +171,16 @@ function App() {
     const reader = new FileReader();
     reader.onload = (e) => {
       try {
-        const content = e.target?.result as string;
-        const project = JSON.parse(content);
+        const content = e.target?.result;
+        if (typeof content !== 'string') return;
 
-        // Basic validation
+        const project = JSON.parse(content) as {
+          params: { tubeLength: number; boreRadius: number; wallThickness?: number };
+          holes: HoleData[]
+        };
+
         if (!project.params || !project.holes) {
-          alert("Invalid project file format");
+          setToast({ type: 'error', text: "Invalid project file format" });
           return;
         }
 
@@ -184,9 +193,10 @@ function App() {
 
         // Reset input value to allow selecting the same file again
         event.target.value = '';
+        setToast({ type: 'success', text: "Project imported successfully" });
       } catch (err) {
         console.error("Failed to parse project file:", err);
-        alert("Failed to import project");
+        setToast({ type: 'error', text: "Failed to import project" });
       }
     };
     reader.readAsText(file);
@@ -232,9 +242,10 @@ function App() {
       link.click();
       document.body.removeChild(link);
       URL.revokeObjectURL(url);
+      setToast({ type: 'success', text: "Exported .OBJ successfully" });
     } catch (e) {
       console.error("Failed to export OBJ:", e);
-      alert("Failed to export OBJ. See console for details.");
+      setToast({ type: 'error', text: "Failed to export OBJ" });
     }
   };
 
@@ -437,7 +448,7 @@ function App() {
                   />
                 </div>
                 <div style={{ display: 'flex', gap: '0.5rem', marginTop: '1rem' }}>
-                  <button className="btn-outline" style={{ width: '100%' }} onClick={(e) => toggleHole(selectedHoleId, e as any)}>
+                  <button className="btn-outline" style={{ width: '100%' }} onClick={(e) => toggleHole(selectedHoleId, e)}>
                     {holes.find(h => h.id === selectedHoleId)?.open ? 'Close Hole' : 'Open Hole'}
                   </button>
                   <button className="btn-danger" onClick={() => deleteHole(selectedHoleId)}>
@@ -453,6 +464,7 @@ function App() {
           </div>
         </div>
       </main>
+      <Toast message={toast} onClose={() => setToast(null)} />
     </div>
   );
 }

@@ -1,73 +1,55 @@
-# React + TypeScript + Vite
+# Flyte: Acoustic Flute Simulation Engine
 
-This template provides a minimal setup to get React working in Vite with HMR and some ESLint rules.
+Flyte is a web-based acoustic simulation tool for designing and analyzing flutes. It combines a high-performance Rust/WASM physics engine with a modern React frontend to provide real-time pitch prediction and ergonomic design capabilities.
 
-Currently, two official plugins are available:
+## Features
 
-- [@vitejs/plugin-react](https://github.com/vitejs/vite-plugin-react/blob/main/packages/plugin-react) uses [Babel](https://babeljs.io/) (or [oxc](https://oxc.rs) when used in [rolldown-vite](https://vite.dev/guide/rolldown)) for Fast Refresh
-- [@vitejs/plugin-react-swc](https://github.com/vitejs/vite-plugin-react/blob/main/packages/plugin-react-swc) uses [SWC](https://swc.rs/) for Fast Refresh
+*   **Real-time Physics**: Uses Transfer Matrix Method (TMM) to calculate pitch based on tube geometry.
+*   **Interactive Design**: Drag-and-drop holes, adjust tube length, bore radius, and wall thickness.
+*   **WASM Powered**: computationally intensive acoustics logic runs in WebAssembly for near-native performance.
+*   **Import/Export**: Save your designs as JSON or export 3D models (.OBJ) for CAD/rendering.
 
-## React Compiler
+## Prerequisites
 
-The React Compiler is not enabled on this template because of its impact on dev & build performances. To add it, see [this documentation](https://react.dev/learn/react-compiler/installation).
+*   **Rust**: [Install Rust](https://www.rust-lang.org/tools/install)
+*   **Node.js**: [Install Node.js](https://nodejs.org/) (v20+)
+*   **wasm-pack**: `cargo install wasm-pack`
 
-## Expanding the ESLint configuration
+## Development Setup
 
-If you are developing a production application, we recommend updating the configuration to enable type-aware lint rules:
+1.  **Build the WASM Core**:
+    ```bash
+    cd core
+    wasm-pack build --target web
+    ```
 
-```js
-export default defineConfig([
-  globalIgnores(['dist']),
-  {
-    files: ['**/*.{ts,tsx}'],
-    extends: [
-      // Other configs...
+2.  **Install Web Dependencies**:
+    ```bash
+    cd ../web
+    npm install
+    ```
 
-      // Remove tseslint.configs.recommended and replace with this
-      tseslint.configs.recommendedTypeChecked,
-      // Alternatively, use this for stricter rules
-      tseslint.configs.strictTypeChecked,
-      // Optionally, add this for stylistic rules
-      tseslint.configs.stylisticTypeChecked,
+3.  **Run Development Server**:
+    ```bash
+    npm run dev
+    ```
+    Open [http://localhost:5173](http://localhost:5173) in your browser.
 
-      // Other configs...
-    ],
-    languageOptions: {
-      parserOptions: {
-        project: ['./tsconfig.node.json', './tsconfig.app.json'],
-        tsconfigRootDir: import.meta.dirname,
-      },
-      // other options...
-    },
-  },
-])
-```
+## Building for Production
 
-You can also install [eslint-plugin-react-x](https://github.com/Rel1cx/eslint-react/tree/main/packages/plugins/eslint-plugin-react-x) and [eslint-plugin-react-dom](https://github.com/Rel1cx/eslint-react/tree/main/packages/plugins/eslint-plugin-react-dom) for React-specific lint rules:
+To create a production build:
 
-```js
-// eslint.config.js
-import reactX from 'eslint-plugin-react-x'
-import reactDom from 'eslint-plugin-react-dom'
+1.  Ensure the WASM module is built:
+    ```bash
+    cd core && wasm-pack build --target web
+    ```
+2.  Build the web app:
+    ```bash
+    cd ../web && npm run build
+    ```
+    The output will be in `web/dist`.
 
-export default defineConfig([
-  globalIgnores(['dist']),
-  {
-    files: ['**/*.{ts,tsx}'],
-    extends: [
-      // Other configs...
-      // Enable lint rules for React
-      reactX.configs['recommended-typescript'],
-      // Enable lint rules for React DOM
-      reactDom.configs.recommended,
-    ],
-    languageOptions: {
-      parserOptions: {
-        project: ['./tsconfig.node.json', './tsconfig.app.json'],
-        tsconfigRootDir: import.meta.dirname,
-      },
-      // other options...
-    },
-  },
-])
-```
+## Project Structure
+
+*   `core/`: Rust crate containing the physics engine and geometry logic.
+*   `web/`: React + TypeScript frontend application.
