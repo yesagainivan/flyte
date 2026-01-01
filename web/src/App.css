@@ -1,0 +1,77 @@
+:root {
+  font-family: Inter, system-ui, Avenir, Helvetica, Arial, sans-serif;
+  line-height: 1.5;
+  font-weight: 400;
+
+  color-scheme: light dark;
+  color: rgba(255, 255, 255, 0.87);
+  background-color: #242424;
+
+  font-synthesis: none;
+  text-rendering: optimizeLegibility;
+  -webkit-font-smoothing: antialiased;
+  -moz-osx-font-smoothing: grayscale;
+}
+
+body {
+  margin: 0;
+  display: flex;
+  place-items: center;
+  min-width: 320px;
+  min-height: 100vh;
+}
+
+#root {
+  max-width: 1280px;
+  margin: 0 auto;
+  padding: 2rem;
+  text-align: center;
+  width: 100%;
+}
+
+.app-container {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 2rem;
+}
+
+.readout {
+  background: #1a1a1a;
+  padding: 2rem;
+  border-radius: 12px;
+  min-width: 200px;
+  box-shadow: 0 4px 6px rgba(0,0,0,0.3);
+}
+
+.hz-display {
+  font-size: 3rem;
+  font-weight: bold;
+  font-variant-numeric: tabular-nums;
+  color: #646cff;
+}
+
+.unit {
+  font-size: 1rem;
+  color: #666;
+}
+
+.note-name {
+  font-size: 1.5rem;
+  color: #aaa;
+  margin-top: 0.5rem;
+}
+
+.flute-container {
+  padding: 2rem;
+  background: #2a2a2a;
+  border-radius: 16px;
+  overflow-x: auto;
+  width: 100%;
+  display: flex;
+  justify-content: center;
+}
+
+.controls {
+  color: #888;
+}
