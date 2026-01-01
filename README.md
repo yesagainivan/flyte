@@ -2,6 +2,8 @@
 
 **Flyte** is a modern acoustic simulation and design tool for flutes. It enables makers and enthusiasts to mathematically design flutes, simulate their pitch, and export 3D models for manufacturing.
 
+🚀 **Try it online:** [yesagainivan.github.io/flyte](https://yesagainivan.github.io/flyte/)
+
 ## Project Structure
 
 This project is organized as a monorepo containing:
