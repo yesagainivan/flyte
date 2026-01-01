@@ -188,38 +188,9 @@ pub fn generate_flute_mesh(flute: &Flute) -> Mesh {
 
     // 3. Mouth Hole Cutter
     mesh.set_group("MouthHoleCutter");
-    // Mouth is at 0? No, in UI it's at an offset.
-    // In physics, mouth is at 0.
-    // But physically, on a flute, the mouth hole is at some distance from the stopper.
-    // "Mouth" in UI is drawn at `2 * PX_PER_CM`.
-    // If the physics says L=60 is "acoustic length", the physical tube is usually longer (headjoint).
-    // For this export, let's place a cutter at x=0 (the acoustic mouth) OR
-    // stick to the visual representation?
-    // The user's question "mouth hole position... does not matter?" implies confusion.
-    // I will place a cutter at X=0 to represent the *acoustic* embouchure point.
-    // AND I will extend the tube slightly to the left (-5cm?) so the hole isn't on the edge?
-    // Wait, `impedance_at` treats 0 as the open end (embouchure).
-    // If I export a tube from 0 to L, the mouth hole IS the end of the tube (end-blown-like).
-    // But a transverse flute has a side hole.
-    // If the simulation is for a transverse flute, the "mouth" is a side hole at X=0.
-    // And there should be a stopper at X = -Something.
-    // Since the physics ignores the stopper, I should probably generate a tube that *starts* a bit before 0, and put a hole at 0.
-    // Let's add a "Headjoint Extension" to the visual model.
-    // Extension: -5.0 to 0.0.
-    // Stopper at -5.0.
 
-    // Modify Tube Body generation (REDOING LOGIC mentally):
-    // Let's make the tube mesh go from -3.0 to Length.
-    // Cap at -3.0.
-    // Cutter at 0.0.
-
-    // Re-doing the tube part?
-    // Actually, I can just append another section?
-    // No, `generate_flute_mesh` takes `Flute`.
-    // I will stick to 0 to L for the main tube for now to match the user's explicit "Length" parameter.
-    // If I add extra length, it might confuse them.
-    // But for a side-blown flute, 0 is the hole.
-    // I will put a cutter at 0.0.
+    // Position the mouth hole at x=0, which corresponds to the acoustic start of the air column.
+    // The physical tube extends backwards to -5.0cm (headjoint/stopper) for visual realism.
 
     let m_r = 0.4; // Approximate mouth radius
     let m_x = 0.0; // At the "start"

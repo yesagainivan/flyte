@@ -43,11 +43,11 @@ function App() {
     initialized.current = true;
 
     init().then(() => {
-      console.log("WASM Initialized");
+
       const eng = new FluteEngine(tubeLength, boreRadius, wallThickness);
       setEngine(eng);
     });
-  }, []);
+  }, [tubeLength, boreRadius, wallThickness]);
 
   // Update Global Physics Parameters
   useEffect(() => {
