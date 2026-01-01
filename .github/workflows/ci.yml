@@ -33,7 +33,7 @@ jobs:
 
       - name: Build Core (WASM)
         working-directory: ./core
-        run: wasm-pack build --target web
+        run: wasm-pack build --release --target web
 
       # --- WEB FRONTEND SETUP & CHECKS ---
       - name: Setup Node.js
