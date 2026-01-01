@@ -1,0 +1,15 @@
+<svg width="100" height="100" viewBox="0 0 100 100" xmlns="http://www.w3.org/2000/svg">
+  <!-- Sonic Ring: Sound Expansion -->
+  
+  <!-- Central Pit / Origin -->
+  <circle cx="50" cy="50" r="14" fill="#000000" />
+  
+  <!-- First Wave -->
+  <path d="M 50 24 A 26 26 0 1 1 50 76 A 26 26 0 1 1 50 24 Z" 
+        fill="none" stroke="#000000" stroke-width="6" stroke-dasharray="20 10" />
+        
+  <!-- Second Wave -->
+  <path d="M 50 6 A 44 44 0 1 1 50 94 A 44 44 0 1 1 50 6 Z" 
+        fill="none" stroke="#000000" stroke-width="4" />
+
+</svg>

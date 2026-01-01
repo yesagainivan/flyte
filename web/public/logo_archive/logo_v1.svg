@@ -1,0 +1,20 @@
+<svg width="100" height="100" viewBox="0 0 100 100" xmlns="http://www.w3.org/2000/svg">
+  <!-- Minimalist Holes: An abstract representation of pitch holes -->
+  
+  <!-- Base Guide Line (invisible or very subtle? Let's keep it purely implied by alignment) -->
+  
+  <!-- Hole 1 -->
+  <circle cx="50" cy="20" r="12" fill="#334155" />
+  
+  <!-- Hole 2 -->
+  <circle cx="50" cy="45" r="9" fill="#334155" />
+  
+  <!-- Hole 3 -->
+  <circle cx="50" cy="65" r="7" fill="#334155" />
+  
+  <!-- Hole 4 -->
+  <circle cx="50" cy="82" r="5" fill="#334155" />
+  
+  <!-- Accent to break symmetry slightly -->
+  <circle cx="68" cy="45" r="3" fill="#94a3b8" />
+</svg>
