@@ -1,5 +1,6 @@
 import { useEffect, useState } from 'react';
 import init, { FluteEngine } from 'flyte_core';
+import { Tuner } from './components/Tuner';
 import './App.css';
 
 interface HoleData {
@@ -11,7 +12,7 @@ interface HoleData {
 
 const TUBE_LENGTH = 60.0; // cm example (flute is ~60-70cm)
 const BORE_RADIUS = 0.95; // cm (19mm dia)
-const WALL_THICKNESS = 0.04; // cm (0.4mm)
+const WALL_THICKNESS = 0.4; // Updated from 0.04 to 0.4cm (4mm is realistic for wood, 0.4mm for metal)
 const PX_PER_CM = 10;
 
 function App() {
@@ -48,7 +49,12 @@ function App() {
     }));
 
     engine.set_holes(rustHoles);
-    setPitch(engine.calculate_pitch());
+    // Use previous pitch as guess, or default if 0
+    const newPitch = engine.calculate_pitch(pitch);
+    // Safety check against garbage
+    if (newPitch > 20 && newPitch < 5000) {
+      setPitch(newPitch);
+    }
   }, [holes, engine]);
 
   const handlePointerDown = (id: number, e: React.PointerEvent) => {
@@ -69,7 +75,7 @@ function App() {
     let newPos = x / PX_PER_CM;
 
     // Clamp to tube length
-    newPos = Math.max(0, Math.min(TUBE_LENGTH, newPos));
+    newPos = Math.max(1.0, Math.min(TUBE_LENGTH - 1.0, newPos));
 
     setHoles(prev => prev.map(h =>
       h.id === draggingId ? { ...h, position: newPos } : h
@@ -88,76 +94,104 @@ function App() {
     ));
   };
 
+  // Tuning calc
+  const { noteName, cents } = getNoteInfo(pitch);
+
   return (
     <div className="app-container">
-      <h1>Flyte</h1>
-      <div className="readout">
-        <div className="hz-display">
-          {pitch.toFixed(1)} <span className="unit">Hz</span>
+      <header>
+        <h1>Flyte <span className="version">Pro</span></h1>
+        <p className="subtitle">Acoustic Design Studio</p>
+      </header>
+
+      <div className="workspace">
+        <div className="physics-panel">
+          <Tuner cents={cents} noteName={noteName} />
+          <div className="hz-readout">{pitch.toFixed(1)} Hz</div>
         </div>
-        <div className="note-name">
-          {/* Approximate note name logic could go here */}
-          approx {getNoteName(pitch)}
+
+        <div className="flute-container">
+          <svg
+            width={TUBE_LENGTH * PX_PER_CM + 100}
+            height={200}
+            className="flute-svg"
+            onPointerMove={draggingId !== null ? handlePointerMove : undefined}
+            onPointerUp={draggingId !== null ? handlePointerUp : undefined}
+          >
+            {/* Main Tube Body */}
+            <defs>
+              <linearGradient id="woodGradient" x1="0" x2="0" y1="0" y2="1">
+                <stop offset="0%" stopColor="#5d4037" />
+                <stop offset="50%" stopColor="#8d6e63" />
+                <stop offset="100%" stopColor="#4e342e" />
+              </linearGradient>
+            </defs>
+            <rect
+              x={0}
+              y={80}
+              width={TUBE_LENGTH * PX_PER_CM}
+              height={40}
+              fill="url(#woodGradient)"
+              stroke="#3e2723"
+              strokeWidth={2}
+              rx={5}
+            />
+
+            {/* Embouchure */}
+            <circle cx={2 * PX_PER_CM} cy={100} r={5} fill="#1a1a1a" stroke="#000" strokeWidth={1} />
+
+            {/* Tone Holes */}
+            {holes.map(hole => (
+              <g key={hole.id} transform={`translate(${hole.position * PX_PER_CM}, 100)`}>
+                {/* Hole Rim */}
+                <circle
+                  r={hole.radius * PX_PER_CM * 2 + 2}
+                  fill="#5d4037"
+                  opacity={0.5}
+                />
+                {/* Hole Opening */}
+                <circle
+                  r={hole.radius * PX_PER_CM * 2}
+                  fill={hole.open ? "#222" : "#a1887f"}
+                  stroke={hole.open ? "#000" : "#5d4037"}
+                  strokeWidth={2}
+                  cursor="ew-resize"
+                  onPointerDown={(e) => handlePointerDown(hole.id, e)}
+                  onClick={() => toggleHole(hole.id)}
+                />
+                <line y1={12} y2={40} stroke="rgba(255,255,255,0.2)" strokeDasharray="2 2" />
+                <text y={55} textAnchor="middle" fill="#ccc" fontSize="10" fontFamily="monospace">
+                  {hole.position.toFixed(1)}
+                </text>
+              </g>
+            ))}
+          </svg>
         </div>
       </div>
 
-      <div className="flute-container">
-        <svg
-          width={TUBE_LENGTH * PX_PER_CM + 100}
-          height={200}
-          className="flute-svg"
-          onPointerMove={draggingId !== null ? handlePointerMove : undefined}
-          onPointerUp={draggingId !== null ? handlePointerUp : undefined}
-        >
-          {/* Main Tube Body */}
-          <rect
-            x={0}
-            y={80}
-            width={TUBE_LENGTH * PX_PER_CM}
-            height={40}
-            fill="#8d6e63"
-            stroke="#5d4037"
-            strokeWidth={2}
-            rx={5}
-          />
-
-          {/* Embouchure (Mouth hole) - usually near 0 but physically a bit in */}
-          <circle cx={2 * PX_PER_CM} cy={100} r={5} fill="black" opacity={0.8} />
-
-          {/* Tone Holes */}
-          {holes.map(hole => (
-            <g key={hole.id} transform={`translate(${hole.position * PX_PER_CM}, 100)`}>
-              <circle
-                r={hole.radius * PX_PER_CM * 2} // Visual exaggeration for easy gripping
-                fill={hole.open ? "#1a1a1a" : "#d7ccc8"}
-                stroke="white"
-                strokeWidth={2}
-                cursor="ew-resize"
-                onPointerDown={(e) => handlePointerDown(hole.id, e)}
-                onClick={() => toggleHole(hole.id)}
-              />
-              <text y={-25} textAnchor="middle" fill="#ccc" fontSize="12">
-                {hole.position.toFixed(1)}cm
-              </text>
-            </g>
-          ))}
-        </svg>
-      </div>
-
-      <div className="controls">
-        <p>Drag holes to adjust position. Click to close/open.</p>
+      <div className="controls-panel">
+        <h3>Design Controls</h3>
+        <p>Tube Length: {TUBE_LENGTH}cm | Bore: {BORE_RADIUS * 20}mm | Wall: {WALL_THICKNESS * 10}mm</p>
       </div>
     </div>
   );
 }
 
-function getNoteName(hz: number): string {
-  if (hz === 0) return "--";
+function getNoteInfo(hz: number): { noteName: string, cents: number } {
+  if (hz < 20) return { noteName: "--", cents: 0 };
   const A4 = 440;
-  const semitones = 12 * Math.log2(hz / A4);
-  const noteIndex = Math.round(semitones) + 69; // MIDI note number
+  const semitonesFromA4 = 12 * Math.log2(hz / A4);
+  const roundedSemitones = Math.round(semitonesFromA4);
+  const cents = (semitonesFromA4 - roundedSemitones) * 100;
+
   const notes = ["C", "C#", "D", "D#", "E", "F", "F#", "G", "G#", "A", "A#", "B"];
-  return notes[noteIndex % 12];
+  const noteIndex = (roundedSemitones + 69) % 12;
+  const octave = Math.floor((roundedSemitones + 69) / 12) - 1;
+
+  return {
+    noteName: `${notes[noteIndex < 0 ? 12 + noteIndex : noteIndex]}${octave}`,
+    cents
+  };
 }
 
 export default App;

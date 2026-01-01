@@ -1,77 +1,111 @@
+/* Pro Styling */
 :root {
-  font-family: Inter, system-ui, Avenir, Helvetica, Arial, sans-serif;
-  line-height: 1.5;
-  font-weight: 400;
-
-  color-scheme: light dark;
-  color: rgba(255, 255, 255, 0.87);
-  background-color: #242424;
-
-  font-synthesis: none;
-  text-rendering: optimizeLegibility;
-  -webkit-font-smoothing: antialiased;
-  -moz-osx-font-smoothing: grayscale;
+  --bg-dark: #1e1e1e;
+  --bg-panel: #2d2d2d;
+  --text-main: #e0e0e0;
+  --accent: #4caf50;
+  --wood-light: #8d6e63;
+  --wood-dark: #5d4037;
 }
 
 body {
+  background-color: var(--bg-dark);
+  color: var(--text-main);
+  font-family: 'Inter', sans-serif;
   margin: 0;
-  display: flex;
-  place-items: center;
-  min-width: 320px;
-  min-height: 100vh;
-}
-
-#root {
-  max-width: 1280px;
-  margin: 0 auto;
-  padding: 2rem;
-  text-align: center;
-  width: 100%;
+  overflow: hidden;
+  /* App feel */
 }
 
 .app-container {
   display: flex;
   flex-direction: column;
-  align-items: center;
-  gap: 2rem;
+  height: 100vh;
+  padding: 1rem;
+  box-sizing: border-box;
 }
 
-.readout {
-  background: #1a1a1a;
-  padding: 2rem;
-  border-radius: 12px;
-  min-width: 200px;
-  box-shadow: 0 4px 6px rgba(0,0,0,0.3);
+header {
+  display: flex;
+  justify-content: space-between;
+  align-items: baseline;
+  padding-bottom: 1rem;
+  border-bottom: 1px solid #444;
 }
 
-.hz-display {
-  font-size: 3rem;
+h1 {
+  margin: 0;
+  font-weight: 300;
+  letter-spacing: -1px;
+}
+
+.version {
+  color: var(--accent);
+  font-size: 0.5em;
   font-weight: bold;
+  vertical-align: super;
+  text-transform: uppercase;
+}
+
+.subtitle {
+  color: #888;
+  margin: 0;
+}
+
+.workspace {
+  flex: 1;
+  display: flex;
+  flex-direction: column;
+  justify-content: center;
+  gap: 2rem;
+  padding: 2rem;
+}
+
+.physics-panel {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 1rem;
+}
+
+.tuner {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+}
+
+.hz-readout {
   font-variant-numeric: tabular-nums;
-  color: #646cff;
-}
-
-.unit {
-  font-size: 1rem;
+  font-family: 'Roboto Mono', monospace;
   color: #666;
+  font-size: 1.2rem;
 }
 
-.note-name {
-  font-size: 1.5rem;
-  color: #aaa;
-  margin-top: 0.5rem;
+.note-large {
+  font-size: 4rem;
+  font-weight: 900;
+  color: #fff;
+  line-height: 1;
 }
 
 .flute-container {
+  background: var(--bg-panel);
+  border-radius: 12px;
+  box-shadow: inset 0 2px 10px rgba(0, 0, 0, 0.5);
   padding: 2rem;
-  background: #2a2a2a;
-  border-radius: 16px;
   overflow-x: auto;
-  width: 100%;
+  min-height: 250px;
   display: flex;
+  align-items: center;
   justify-content: center;
 }
 
-.controls {
-  color: #888;
+.controls-panel {
+  padding: 1rem;
+  background: var(--bg-panel);
+  border-radius: 8px;
+  font-size: 0.9rem;
+  color: #aaa;
+  display: flex;
+  justify-content: space-between;
 }
