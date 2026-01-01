@@ -104,8 +104,8 @@ impl Flute {
         // Secant method or simple bisection/scan around guess
         // We look for Im(Z_in) = 0.
 
-        let mut f0 = guess_freq * 0.8;
-        let mut f1 = guess_freq * 1.2;
+        let _f0 = guess_freq * 0.8;
+        let _f1 = guess_freq * 1.2;
 
         // Narrow down a bit or just run Secant
         // Let's iterate 20 times max

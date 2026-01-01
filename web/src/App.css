@@ -57,6 +57,7 @@ h1 {
   display: flex;
   flex-direction: column;
   justify-content: center;
+  align-items: center;
   gap: 2rem;
   padding: 2rem;
 }
@@ -108,4 +109,58 @@ h1 {
   color: #aaa;
   display: flex;
   justify-content: space-between;
+  align-items: center;
+}
+
+.design-controls {
+  display: flex;
+  gap: 1rem;
+  align-items: center;
+}
+
+.hole-inspector {
+  display: flex;
+  gap: 1rem;
+  align-items: center;
+  background: rgba(0, 0, 0, 0.2);
+  padding: 0.5rem 1rem;
+  border-radius: 6px;
+}
+
+.control-group {
+  display: flex;
+  gap: 0.5rem;
+  align-items: center;
+}
+
+input[type="number"] {
+  background: #333;
+  border: 1px solid #555;
+  color: white;
+  padding: 4px;
+  border-radius: 4px;
+  width: 60px;
+}
+
+button {
+  cursor: pointer;
+  border: none;
+  padding: 0.5rem 1rem;
+  border-radius: 4px;
+  font-weight: bold;
+  transition: opacity 0.2s;
+}
+
+button:hover {
+  opacity: 0.8;
+}
+
+.btn-primary {
+  background: var(--accent);
+  color: white;
+}
+
+.btn-danger {
+  background: #d32f2f;
+  color: white;
 }

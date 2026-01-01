@@ -2,10 +2,6 @@ mod physics;
 use physics::{Flute, Hole};
 use wasm_bindgen::prelude::*;
 
-#[cfg(feature = "wee_alloc")]
-#[global_allocator]
-static ALLOC: wee_alloc::WeeAlloc = wee_alloc::WeeAlloc::INIT;
-
 #[wasm_bindgen]
 pub struct FluteEngine {
     inner: Flute,
@@ -21,11 +17,16 @@ impl FluteEngine {
         }
     }
 
-    pub fn set_holes(&mut self, holes: JsValue) {
-        let holes: Vec<Hole> = serde_wasm_bindgen::from_value(holes).unwrap();
-        self.inner.holes = holes;
-        // physics.rs handles sorting when optimizing, but good to keep state consistent?
-        // Actually physics.rs sorts inside the method.
+    pub fn set_holes(&mut self, positions: &[f64], radii: &[f64], open: &[u8]) {
+        let mut new_holes = Vec::with_capacity(positions.len());
+        for i in 0..positions.len() {
+            new_holes.push(Hole {
+                position: positions[i],
+                radius: radii[i],
+                open: open[i] != 0,
+            });
+        }
+        self.inner.holes = new_holes;
     }
 
     /// Calculate pitch using TMM and Resonance search

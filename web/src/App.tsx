@@ -28,6 +28,7 @@ function App() {
     { id: 6, position: 45.0, radius: 0.4, open: true },
   ]);
   const [draggingId, setDraggingId] = useState<number | null>(null);
+  const [selectedHoleId, setSelectedHoleId] = useState<number | null>(null);
 
   useEffect(() => {
     init().then(() => {
@@ -42,18 +43,21 @@ function App() {
     // Convert our friendly HoleData to the partial struct expected by set_holes
     // Note: We need to match the Rust struct field names exactly if using serde?
     // Actually, in Rust `Hole` has `position`, `radius`, `open`.
-    const rustHoles = holes.map(h => ({
-      position: h.position,
-      radius: h.radius,
-      open: h.open
-    }));
+    try {
+      const positions = new Float64Array(holes.map(h => h.position));
+      const radii = new Float64Array(holes.map(h => h.radius));
+      const open = new Uint8Array(holes.map(h => h.open ? 1 : 0));
 
-    engine.set_holes(rustHoles);
-    // Use previous pitch as guess, or default if 0
-    const newPitch = engine.calculate_pitch(pitch);
-    // Safety check against garbage
-    if (newPitch > 20 && newPitch < 5000) {
-      setPitch(newPitch);
+      engine.set_holes(positions, radii, open);
+
+      // Use previous pitch as guess, or default if 0
+      const newPitch = engine.calculate_pitch(pitch);
+      // Safety check against garbage
+      if (newPitch > 20 && newPitch < 5000) {
+        setPitch(newPitch);
+      }
+    } catch (e) {
+      console.error("Error updating physics engine:", e);
     }
   }, [holes, engine]);
 
@@ -61,6 +65,7 @@ function App() {
     e.stopPropagation();
     e.currentTarget.setPointerCapture(e.pointerId);
     setDraggingId(id);
+    setSelectedHoleId(id);
   };
 
   const handlePointerMove = (e: React.PointerEvent) => {
@@ -92,6 +97,23 @@ function App() {
     setHoles(prev => prev.map(h =>
       h.id === id ? { ...h, open: !h.open } : h
     ));
+    setSelectedHoleId(id);
+  };
+
+  const addHole = () => {
+    const newId = (holes.length > 0 ? Math.max(...holes.map(h => h.id)) : 0) + 1;
+    // Default to halfway of tube or near end
+    setHoles(prev => [...prev, { id: newId, position: TUBE_LENGTH / 2, radius: 0.35, open: true }]);
+    setSelectedHoleId(newId);
+  };
+
+  const deleteHole = (id: number) => {
+    setHoles(prev => prev.filter(h => h.id !== id));
+    if (selectedHoleId === id) setSelectedHoleId(null);
+  };
+
+  const updateRadius = (id: number, newRadius: number) => {
+    setHoles(prev => prev.map(h => h.id === id ? { ...h, radius: newRadius } : h));
   };
 
   // Tuning calc
@@ -148,6 +170,8 @@ function App() {
                   r={hole.radius * PX_PER_CM * 2 + 2}
                   fill="#5d4037"
                   opacity={0.5}
+                  stroke={selectedHoleId === hole.id ? "#4caf50" : "none"}
+                  strokeWidth={selectedHoleId === hole.id ? 2 : 0}
                 />
                 {/* Hole Opening */}
                 <circle
@@ -170,8 +194,27 @@ function App() {
       </div>
 
       <div className="controls-panel">
-        <h3>Design Controls</h3>
-        <p>Tube Length: {TUBE_LENGTH}cm | Bore: {BORE_RADIUS * 20}mm | Wall: {WALL_THICKNESS * 10}mm</p>
+        <div className="design-controls">
+          <h3>Design Controls</h3>
+          <p>Tube Length: {TUBE_LENGTH}cm | Bore: {BORE_RADIUS * 20}mm</p>
+          <button className="btn-primary" onClick={addHole}>+ Add Hole</button>
+        </div>
+
+        {selectedHoleId !== null && (
+          <div className="hole-inspector">
+            <h4>Hole #{selectedHoleId}</h4>
+            <div className="control-group">
+              <label>Radius (cm)</label>
+              <input
+                type="number"
+                step="0.05"
+                value={holes.find(h => h.id === selectedHoleId)?.radius || 0.35}
+                onChange={(e) => updateRadius(selectedHoleId, parseFloat(e.target.value))}
+              />
+            </div>
+            <button className="btn-danger" onClick={() => deleteHole(selectedHoleId)}>Remove</button>
+          </div>
+        )}
       </div>
     </div>
   );
