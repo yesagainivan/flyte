@@ -1,3 +1,4 @@
+mod geometry;
 mod physics;
 use physics::{Flute, Hole};
 use wasm_bindgen::prelude::*;
@@ -118,5 +119,10 @@ impl FluteEngine {
         let robust_guess = 34500.0 / (2.0 * effective_len);
 
         self.inner.find_resonance(robust_guess)
+    }
+
+    pub fn export_obj(&self) -> String {
+        let mesh = geometry::generate_flute_mesh(&self.inner);
+        mesh.to_obj_string()
     }
 }

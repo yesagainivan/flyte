@@ -157,6 +157,87 @@ function App() {
 
   const { noteName, cents } = getNoteInfo(pitch);
 
+  const fileInputRef = useRef<HTMLInputElement>(null);
+
+  const handleImportProject = (event: React.ChangeEvent<HTMLInputElement>) => {
+    const file = event.target.files?.[0];
+    if (!file) return;
+
+    const reader = new FileReader();
+    reader.onload = (e) => {
+      try {
+        const content = e.target?.result as string;
+        const project = JSON.parse(content);
+
+        // Basic validation
+        if (!project.params || !project.holes) {
+          alert("Invalid project file format");
+          return;
+        }
+
+        setTubeLength(project.params.tubeLength);
+        setBoreRadius(project.params.boreRadius);
+        if (project.params.wallThickness) {
+          setWallThickness(project.params.wallThickness);
+        }
+        setHoles(project.holes);
+
+        // Reset input value to allow selecting the same file again
+        event.target.value = '';
+      } catch (err) {
+        console.error("Failed to parse project file:", err);
+        alert("Failed to import project");
+      }
+    };
+    reader.readAsText(file);
+  };
+
+  const triggerImport = () => {
+    fileInputRef.current?.click();
+  };
+
+  const handleSaveProject = () => {
+    const project = {
+      version: 1,
+      timestamp: new Date().toISOString(),
+      params: {
+        tubeLength,
+        boreRadius,
+        wallThickness
+      },
+      holes
+    };
+
+    const blob = new Blob([JSON.stringify(project, null, 2)], { type: 'application/json' });
+    const url = URL.createObjectURL(blob);
+    const link = document.createElement('a');
+    link.href = url;
+    link.download = `flyte-project-${new Date().toISOString().slice(0, 10)}.json`;
+    document.body.appendChild(link);
+    link.click();
+    document.body.removeChild(link);
+    URL.revokeObjectURL(url);
+  };
+
+  const handleExportObj = () => {
+    if (!engine) return;
+    try {
+      const objData = engine.export_obj();
+      const blob = new Blob([objData], { type: 'text/plain' });
+      const url = URL.createObjectURL(blob);
+      const link = document.createElement('a');
+      link.href = url;
+      link.download = `flyte-model.obj`;
+      document.body.appendChild(link);
+      link.click();
+      document.body.removeChild(link);
+      URL.revokeObjectURL(url);
+    } catch (e) {
+      console.error("Failed to export OBJ:", e);
+      alert("Failed to export OBJ. See console for details.");
+    }
+  };
+
   return (
     <div className="app-container">
       <header>
@@ -165,8 +246,16 @@ function App() {
           <p className="subtitle">Acoustic Simulation Engine</p>
         </div>
         <div style={{ display: 'flex', gap: '1rem' }}>
-          <button className="btn-outline">Save Project</button>
-          <button className="btn-primary">Export .OBJ</button>
+          <input
+            type="file"
+            ref={fileInputRef}
+            style={{ display: 'none' }}
+            accept=".json"
+            onChange={handleImportProject}
+          />
+          <button className="btn-outline" onClick={triggerImport}>Import Project</button>
+          <button className="btn-outline" onClick={handleSaveProject}>Save Project</button>
+          <button className="btn-primary" onClick={handleExportObj}>Export .OBJ</button>
         </div>
       </header>
 
