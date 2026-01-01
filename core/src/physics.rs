@@ -31,7 +31,7 @@ impl Flute {
     }
     /// Calculate input impedance at the embouchure for a given frequency
     /// Assumes holes are already sorted back-to-front by find_resonance
-    fn impedance_at(&self, freq: f64) -> Complex64 {
+    fn impedance_at(&self, freq: f64, holes: &[Hole]) -> Complex64 {
         let omega = 2.0 * PI * freq;
         let k = omega / SPEED_OF_SOUND;
 
@@ -47,7 +47,7 @@ impl Flute {
         let mut current_pos = self.length;
 
         // Iterate over holes (which we assume are sorted back-to-front)
-        for hole in &self.holes {
+        for hole in holes {
             // A. Transmission line from current_pos back to hole.position
             let dist = current_pos - hole.position;
             if dist > 0.0 {
@@ -96,8 +96,11 @@ impl Flute {
 
     /// Find the resonance frequency closest to the target guess
     pub fn find_resonance(&mut self, guess_freq: f64) -> f64 {
+        // Clone holes to avoid modifying the actual state
+        let mut sorted_holes = self.holes.clone();
+
         // Sort holes in-place (back-to-front) to avoid allocations
-        self.holes.sort_by(|a, b| {
+        sorted_holes.sort_by(|a, b| {
             b.position
                 .partial_cmp(&a.position)
                 .unwrap_or(std::cmp::Ordering::Equal)
@@ -111,8 +114,8 @@ impl Flute {
         let mut f_prev = guess_freq - 10.0;
 
         for _ in 0..20 {
-            let z_curr = self.impedance_at(f_curr);
-            let z_prev = self.impedance_at(f_prev);
+            let z_curr = self.impedance_at(f_curr, &sorted_holes);
+            let z_prev = self.impedance_at(f_prev, &sorted_holes);
 
             let y_curr = z_curr.im;
             let y_prev = z_prev.im;
@@ -172,4 +175,50 @@ fn hole_impedance(radius: f64, wall_thickness: f64, k: f64) -> Complex64 {
 
     let inertance = (AIR_DENSITY * t_eff) / area;
     Complex64::new(0.0, omega * inertance)
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn test_find_resonance_does_not_mutate_hole_order() {
+        let mut flute = Flute::new(60.0, 0.95, 0.4);
+
+        // Add holes in specific order
+        // Hole 1: position 10.0
+        // Hole 2: position 30.0
+        // Hole 3: position 20.0
+        // If sorted back-to-front, it would be 30, 20, 10.
+        // We want to ensure it remains 10, 30, 20 after calculation.
+
+        flute.holes.push(Hole {
+            position: 10.0,
+            radius: 0.3,
+            open: true,
+        });
+        flute.holes.push(Hole {
+            position: 30.0,
+            radius: 0.3,
+            open: true,
+        });
+        flute.holes.push(Hole {
+            position: 20.0,
+            radius: 0.3,
+            open: true,
+        });
+
+        // Initial order check
+        assert_eq!(flute.holes[0].position, 10.0);
+        assert_eq!(flute.holes[1].position, 30.0);
+        assert_eq!(flute.holes[2].position, 20.0);
+
+        // Run calculation
+        let _pitch = flute.find_resonance(440.0);
+
+        // Verify order is preserved
+        assert_eq!(flute.holes[0].position, 10.0, "Hole 0 moved!");
+        assert_eq!(flute.holes[1].position, 30.0, "Hole 1 moved!");
+        assert_eq!(flute.holes[2].position, 20.0, "Hole 2 moved!");
+    }
 }

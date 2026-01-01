@@ -30,9 +30,14 @@ function App() {
   const [draggingId, setDraggingId] = useState<number | null>(null);
   const [selectedHoleId, setSelectedHoleId] = useState<number | null>(null);
   const isDragging = useRef<boolean>(false);
+  const initialized = useRef(false);
 
   useEffect(() => {
+    if (initialized.current) return;
+    initialized.current = true;
+
     init().then(() => {
+      console.log("WASM Initialized");
       const eng = new FluteEngine(TUBE_LENGTH, BORE_RADIUS, WALL_THICKNESS);
       setEngine(eng);
     });
@@ -44,7 +49,6 @@ function App() {
     // Skip heavy full-array update if we are just dragging (we handle that manually)
     if (isDragging.current) return;
 
-    // Convert our friendly HoleData to the partial struct expected by set_holes
     // Convert our friendly HoleData to the partial struct expected by set_holes
     try {
       const positions = new Float64Array(holes.map(h => h.position));
@@ -116,7 +120,7 @@ function App() {
           setPitch(newPitch);
         }
       } catch (err) {
-        console.error(err);
+        console.error("Crash during drag:", err);
       }
     }
   };
@@ -125,19 +129,6 @@ function App() {
     setDraggingId(null);
     e.currentTarget.releasePointerCapture(e.pointerId);
     isDragging.current = false;
-
-    // Trigger a full sync when drag ends to ensure consistency
-    // We do this by toggling a dummy state or just letting the next effect run?
-    // Actually, setting state in handlePointerMove triggers effect, but we blocked it with isDragging.
-    // Now that isDragging is false, we want one final sync.
-    // We can force it by shallow copying holes, but setHoles above already queued a render.
-    // The render happened, effect ran, saw isDragging=true, and skipped.
-    // Now we are done. We need to trigger effect one last time.
-    // Simplest way: just call the update logic manually here or force an effect.
-    // Let's just setHoles with exact same content to trigger effect? No, React bails out.
-    // We can just call setHoles/trigger sync explicitly if we want, but actually
-    // since we updated physics manually, we are in sync!
-    // The NEXT operation (adding hole etc) will be fine.
   };
 
   const toggleHole = (id: number, e: React.MouseEvent) => {
