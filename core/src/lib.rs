@@ -84,6 +84,20 @@ impl FluteEngine {
     /// Uses a smart guess based on the first open hole to ensure we find the fundamental
     /// Calculate pitch using TMM and Resonance search
     /// Uses a smart guess based on the first open hole to ensure we find the fundamental
+    pub fn set_physics_params(&mut self, length: f64, bore_radius: f64, wall_thickness: f64) {
+        if !length.is_nan() && length > 0.0 {
+            self.inner.length = length;
+        }
+        if !bore_radius.is_nan() && bore_radius > 0.0 {
+            self.inner.bore_radius = bore_radius;
+        }
+        if !wall_thickness.is_nan() && wall_thickness > 0.0 {
+            self.inner.wall_thickness = wall_thickness;
+        }
+    }
+
+    /// Calculate pitch using TMM and Resonance search
+    /// Uses a smart guess based on the first open hole to ensure we find the fundamental
     pub fn calculate_pitch(&mut self, _ignored_guess_hz: f64) -> f64 {
         // Find the effective length based on the first open hole (closest to embouchure, pos 0)
         // Holes are sorted by position in find_resonance, but here we just need a scan.

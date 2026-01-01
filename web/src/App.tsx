@@ -1,24 +1,26 @@
 import { useEffect, useState, useRef } from 'react';
 import init, { FluteEngine } from 'flyte_core';
-import { Tuner } from './components/Tuner';
 import './App.css';
 
 interface HoleData {
   id: number;
-  position: number; // cm
+  position: number; // cm, distance from embouchure
   radius: number;   // cm
   open: boolean;
 }
 
-const TUBE_LENGTH = 60.0; // cm example (flute is ~60-70cm)
-const BORE_RADIUS = 0.95; // cm (19mm dia)
-const WALL_THICKNESS = 0.4; // Updated from 0.04 to 0.4cm (4mm is realistic for wood, 0.4mm for metal)
-const PX_PER_CM = 10;
+const PX_PER_CM = 15; // Increased scale for better visibility
 
 function App() {
   const [engine, setEngine] = useState<FluteEngine | null>(null);
   const [pitch, setPitch] = useState<number>(0);
-  // Default holes roughly for a D major scale whistle
+
+  // Physics Parameters State
+  const [tubeLength, setTubeLength] = useState<number>(60.0);
+  const [boreRadius, setBoreRadius] = useState<number>(0.95);
+  const [wallThickness, setWallThickness] = useState<number>(0.4);
+
+  // Holes State
   const [holes, setHoles] = useState<HoleData[]>([
     { id: 1, position: 25.0, radius: 0.35, open: true },
     { id: 2, position: 28.0, radius: 0.35, open: true },
@@ -27,29 +29,42 @@ function App() {
     { id: 5, position: 40.0, radius: 0.4, open: true },
     { id: 6, position: 45.0, radius: 0.4, open: true },
   ]);
+
   const [draggingId, setDraggingId] = useState<number | null>(null);
   const [selectedHoleId, setSelectedHoleId] = useState<number | null>(null);
   const isDragging = useRef<boolean>(false);
   const initialized = useRef(false);
 
+  // Initialize WASM
   useEffect(() => {
     if (initialized.current) return;
     initialized.current = true;
 
     init().then(() => {
       console.log("WASM Initialized");
-      const eng = new FluteEngine(TUBE_LENGTH, BORE_RADIUS, WALL_THICKNESS);
+      const eng = new FluteEngine(tubeLength, boreRadius, wallThickness);
       setEngine(eng);
     });
   }, []);
 
+  // Update Global Physics Parameters
   useEffect(() => {
     if (!engine) return;
+    try {
+      engine.set_physics_params(tubeLength, boreRadius, wallThickness);
+      // Trigger a recalc
+      const newPitch = engine.calculate_pitch(pitch);
+      if (newPitch > 20 && newPitch < 5000) setPitch(newPitch);
+    } catch (e) {
+      console.error("Error updating physics params:", e);
+    }
+  }, [tubeLength, boreRadius, wallThickness, engine]);
 
-    // Skip heavy full-array update if we are just dragging (we handle that manually)
-    if (isDragging.current) return;
+  // Update Holes
+  useEffect(() => {
+    if (!engine) return;
+    if (isDragging.current) return; // Skip heavy updates during drag
 
-    // Convert our friendly HoleData to the partial struct expected by set_holes
     try {
       const positions = new Float64Array(holes.map(h => h.position));
       const radii = new Float64Array(holes.map(h => h.radius));
@@ -57,9 +72,7 @@ function App() {
 
       engine.set_holes(positions, radii, open);
 
-      // Use previous pitch as guess, or default if 0
       const newPitch = engine.calculate_pitch(pitch);
-      // Safety check against garbage
       if (newPitch > 20 && newPitch < 5000) {
         setPitch(newPitch);
       }
@@ -68,17 +81,9 @@ function App() {
     }
   }, [holes, engine]);
 
-  // Removed manual free() to check for double-free issues in React StrictMode
-  // useEffect(() => {
-  //   return () => {
-  //     engine?.free();
-  //   };
-  // }, [engine]);
-
+  // Event Handlers
   const handlePointerDown = (id: number, e: React.PointerEvent) => {
-    // If modifier key is pressed, we want to toggle (handled in onClick), not drag.
-    if (e.metaKey || e.ctrlKey) return;
-
+    if (e.metaKey || e.ctrlKey) return; // Allow click for toggle
     e.stopPropagation();
     e.currentTarget.setPointerCapture(e.pointerId);
     setDraggingId(id);
@@ -87,38 +92,31 @@ function App() {
   };
 
   const handlePointerMove = (e: React.PointerEvent) => {
-    if (draggingId === null) return;
-    if (!engine) return;
+    if (draggingId === null || !engine) return;
 
-    const svgRect = e.currentTarget.parentElement?.getBoundingClientRect();
-    if (!svgRect) return;
+    const svgElement = e.currentTarget.closest('svg');
+    if (!svgElement) return;
 
-    // Calculate new position in cm
-    // x coordinate is relative to the SVG container
+    const svgRect = svgElement.getBoundingClientRect();
     const x = e.clientX - svgRect.left;
     let newPos = x / PX_PER_CM;
 
-    // Clamp to tube length
-    newPos = Math.max(1.0, Math.min(TUBE_LENGTH - 1.0, newPos));
+    // Clamp relative to tube length
+    newPos = Math.max(1.0, Math.min(tubeLength - 1.0, newPos));
 
-    // 1. Update React State (UI)
+    // Optimistic UI Update
     setHoles(prev => prev.map(h =>
       h.id === draggingId ? { ...h, position: newPos } : h
     ));
 
-    // 2. Direct Physics Update (WASM) - Zero Allocation
-    // Find index of hole in the array
+    // Zero-allocation Physics Update
     const holeIndex = holes.findIndex(h => h.id === draggingId);
     if (holeIndex !== -1) {
       try {
         const h = holes[holeIndex];
         engine.update_hole(holeIndex, newPos, h.radius, h.open);
-
-        // Recalculate pitch immediately
         const newPitch = engine.calculate_pitch(pitch);
-        if (newPitch > 20 && newPitch < 5000) {
-          setPitch(newPitch);
-        }
+        if (newPitch > 20 && newPitch < 5000) setPitch(newPitch);
       } catch (err) {
         console.error("Crash during drag:", err);
       }
@@ -133,20 +131,17 @@ function App() {
 
   const toggleHole = (id: number, e: React.MouseEvent) => {
     e.stopPropagation();
-    // Only toggle if Cmd/Ctrl is pressed
     if (e.metaKey || e.ctrlKey) {
       setHoles(prev => prev.map(h =>
         h.id === id ? { ...h, open: !h.open } : h
       ));
     }
-    // Always select the hole we clicked on
     setSelectedHoleId(id);
   };
 
   const addHole = () => {
     const newId = (holes.length > 0 ? Math.max(...holes.map(h => h.id)) : 0) + 1;
-    // Default to halfway of tube or near end
-    setHoles(prev => [...prev, { id: newId, position: TUBE_LENGTH / 2, radius: 0.35, open: true }]);
+    setHoles(prev => [...prev, { id: newId, position: tubeLength / 2, radius: 0.35, open: true }]);
     setSelectedHoleId(newId);
   };
 
@@ -155,111 +150,220 @@ function App() {
     if (selectedHoleId === id) setSelectedHoleId(null);
   };
 
-  const updateRadius = (id: number, newRadius: number) => {
-    if (isNaN(newRadius)) return;
-    setHoles(prev => prev.map(h => h.id === id ? { ...h, radius: newRadius } : h));
+  const updateSelectedRadius = (val: number) => {
+    if (selectedHoleId === null) return;
+    setHoles(prev => prev.map(h => h.id === selectedHoleId ? { ...h, radius: val } : h));
   };
 
-  // Tuning calc
   const { noteName, cents } = getNoteInfo(pitch);
 
   return (
     <div className="app-container">
       <header>
-        <h1>Flyte <span className="version">Pro</span></h1>
-        <p className="subtitle">Acoustic Design Studio</p>
+        <div>
+          <h1>Flyte <span style={{ opacity: 0.5 }}>Architect</span></h1>
+          <p className="subtitle">Acoustic Simulation Engine</p>
+        </div>
+        <div style={{ display: 'flex', gap: '1rem' }}>
+          <button className="btn-outline">Save Project</button>
+          <button className="btn-primary">Export .OBJ</button>
+        </div>
       </header>
 
-      <div className="workspace">
-        <div className="physics-panel">
-          <Tuner cents={cents} noteName={noteName} />
-          <div className="hz-readout">{pitch.toFixed(1)} Hz</div>
-        </div>
-
-        <div className="flute-container">
+      <main className="workspace">
+        <div className="viz-card">
           <svg
-            width={TUBE_LENGTH * PX_PER_CM + 100}
+            width={tubeLength * PX_PER_CM + 100}
             height={200}
             className="flute-svg"
             onPointerMove={draggingId !== null ? handlePointerMove : undefined}
             onPointerUp={draggingId !== null ? handlePointerUp : undefined}
+            style={{ overflow: 'visible' }}
           >
-            {/* Main Tube Body */}
             <defs>
-              <linearGradient id="woodGradient" x1="0" x2="0" y1="0" y2="1">
-                <stop offset="0%" stopColor="#5d4037" />
-                <stop offset="50%" stopColor="#8d6e63" />
-                <stop offset="100%" stopColor="#4e342e" />
+              <linearGradient id="bodyGradient" x1="0" x2="0" y1="0" y2="1">
+                <stop offset="0%" stopColor="#27272a" />
+                <stop offset="50%" stopColor="#3f3f46" />
+                <stop offset="100%" stopColor="#18181b" />
               </linearGradient>
+              <filter id="glow">
+                <feGaussianBlur stdDeviation="2.5" result="coloredBlur" />
+                <feMerge>
+                  <feMergeNode in="coloredBlur" />
+                  <feMergeNode in="SourceGraphic" />
+                </feMerge>
+              </filter>
             </defs>
+
+            {/* Tube Body */}
             <rect
               x={0}
               y={80}
-              width={TUBE_LENGTH * PX_PER_CM}
+              width={tubeLength * PX_PER_CM}
               height={40}
-              fill="url(#woodGradient)"
-              stroke="#3e2723"
-              strokeWidth={2}
-              rx={5}
+              fill="url(#bodyGradient)"
+              stroke="#52525b"
+              strokeWidth={1}
+              rx={4}
             />
 
             {/* Embouchure */}
-            <circle cx={2 * PX_PER_CM} cy={100} r={5} fill="#1a1a1a" stroke="#000" strokeWidth={1} />
+            <g transform={`translate(${2 * PX_PER_CM}, 100)`}>
+              <circle r={6} fill="#09090b" stroke="#52525b" strokeWidth={1} />
+              <text y={25} textAnchor="middle" className="ruler-text">Mouth</text>
+            </g>
 
-            {/* Tone Holes */}
+            {/* Holes */}
             {holes.map(hole => (
               <g key={hole.id} transform={`translate(${hole.position * PX_PER_CM}, 100)`}>
-                {/* Hole Rim */}
-                <circle
-                  r={hole.radius * PX_PER_CM * 2 + 2}
-                  fill="#5d4037"
-                  opacity={0.5}
-                  stroke={selectedHoleId === hole.id ? "#4caf50" : "none"}
-                  strokeWidth={selectedHoleId === hole.id ? 2 : 0}
-                />
-                {/* Hole Opening */}
+                {/* Selection Ring */}
+                {selectedHoleId === hole.id && (
+                  <circle
+                    r={hole.radius * PX_PER_CM * 2 + 6}
+                    fill="none"
+                    stroke="var(--foreground)"
+                    strokeWidth={1}
+                    strokeDasharray="4 2"
+                    opacity={0.5}
+                  />
+                )}
+
+                {/* The Hole */}
                 <circle
                   r={hole.radius * PX_PER_CM * 2}
-                  fill={hole.open ? "#222" : "#a1887f"}
-                  stroke={hole.open ? "#000" : "#5d4037"}
+                  fill={hole.open ? "#09090b" : "#52525b"}
+                  stroke={hole.open ? "#27272a" : "#3f3f46"}
                   strokeWidth={2}
-                  cursor="ew-resize"
+                  cursor="col-resize"
                   onPointerDown={(e) => handlePointerDown(hole.id, e)}
                   onClick={(e) => toggleHole(hole.id, e)}
+                  filter={selectedHoleId === hole.id ? "url(#glow)" : undefined}
                 />
-                <line y1={12} y2={40} stroke="rgba(255,255,255,0.2)" strokeDasharray="2 2" />
-                <text y={55} textAnchor="middle" fill="#ccc" fontSize="10" fontFamily="monospace">
+
+                {/* Guide Line */}
+                <line
+                  y1={25}
+                  y2={50}
+                  stroke="var(--muted-foreground)"
+                  strokeWidth={1}
+                  strokeDasharray="2 2"
+                  opacity={0.3}
+                />
+                <text y={65} textAnchor="middle" className="ruler-text">
                   {hole.position.toFixed(1)}
                 </text>
               </g>
             ))}
+
+            {/* Ruler Markings roughly every 10cm */}
+            {Array.from({ length: Math.ceil(tubeLength / 10) }).map((_, i) => (
+              <g key={i} transform={`translate(${i * 10 * PX_PER_CM}, 135)`}>
+                <line y1={-5} y2={0} stroke="var(--muted-foreground)" strokeWidth={1} />
+                <text y={15} textAnchor="middle" className="ruler-text">{i * 10}cm</text>
+              </g>
+            ))}
           </svg>
         </div>
-      </div>
 
-      <div className="controls-panel">
-        <div className="design-controls">
-          <h3>Design Controls</h3>
-          <p>Tube Length: {TUBE_LENGTH}cm | Bore: {BORE_RADIUS * 20}mm</p>
-          <button className="btn-primary" onClick={addHole}>+ Add Hole</button>
-        </div>
-
-        {selectedHoleId !== null && (
-          <div className="hole-inspector">
-            <h4>Hole #{selectedHoleId}</h4>
-            <div className="control-group">
-              <label>Radius (cm)</label>
-              <input
-                type="number"
-                step="0.05"
-                value={holes.find(h => h.id === selectedHoleId)?.radius || 0.35}
-                onChange={(e) => updateRadius(selectedHoleId, parseFloat(e.target.value))}
-              />
+        <div className="controls-panel">
+          {/* Analysis Card */}
+          <div className="card">
+            <div className="card-header">
+              <h3 className="card-title">Real-time Analysis</h3>
+              <div className="status-indicator active"></div>
             </div>
-            <button className="btn-danger" onClick={() => deleteHole(selectedHoleId)}>Remove</button>
+
+            <div className="pitch-display">
+              <div className="hz-value">{pitch.toFixed(1)} <span style={{ fontSize: '1rem', color: 'var(--muted-foreground)', fontWeight: 400 }}>Hz</span></div>
+              <div className="note-name">{noteName} {cents > 0 ? `+${cents.toFixed(0)}` : cents.toFixed(0)}c</div>
+
+              <div className="cents-indicator">
+                <div className="cents-fill" style={{
+                  left: '50%',
+                  width: `${Math.abs(cents)}%`,
+                  transform: `translateX(${cents < 0 ? '-100%' : '0'})`,
+                  backgroundColor: Math.abs(cents) < 10 ? '#22c55e' : (Math.abs(cents) < 25 ? '#eab308' : '#ef4444')
+                }} />
+                <div className="cents-bar" />
+              </div>
+            </div>
           </div>
-        )}
-      </div>
+
+          {/* Physical Parameters */}
+          <div className="card">
+            <div className="card-header">
+              <h3 className="card-title">Tube Dimensions</h3>
+            </div>
+            <div className="properties-grid">
+              <div className="control-group">
+                <label>Total Length (cm)</label>
+                <input
+                  type="number"
+                  value={tubeLength}
+                  onChange={(e) => setTubeLength(parseFloat(e.target.value))}
+                  step="0.1"
+                />
+              </div>
+              <div className="control-group">
+                <label>Bore Radius (cm)</label>
+                <input
+                  type="number"
+                  value={boreRadius}
+                  onChange={(e) => setBoreRadius(parseFloat(e.target.value))}
+                  step="0.05"
+                />
+              </div>
+              <div className="control-group">
+                <label>Wall Thickness (cm)</label>
+                <input
+                  type="number"
+                  value={wallThickness}
+                  onChange={(e) => setWallThickness(parseFloat(e.target.value))}
+                  step="0.05"
+                />
+              </div>
+            </div>
+          </div>
+
+          {/* Hole Inspector */}
+          <div className="card">
+            <div className="card-header">
+              <h3 className="card-title">
+                {selectedHoleId ? `Hole #${selectedHoleId} Configuration` : 'Hole Configuration'}
+              </h3>
+              <button className="btn-primary" onClick={addHole} style={{ fontSize: '0.75rem', height: '2rem' }}>
+                + Add New
+              </button>
+            </div>
+
+            {selectedHoleId ? (
+              <div className="hole-details">
+                <div className="control-group">
+                  <label>Radius (cm)</label>
+                  <input
+                    type="number"
+                    step="0.05"
+                    value={holes.find(h => h.id === selectedHoleId)?.radius || 0.35}
+                    onChange={(e) => updateSelectedRadius(parseFloat(e.target.value))}
+                  />
+                </div>
+                <div style={{ display: 'flex', gap: '0.5rem', marginTop: '1rem' }}>
+                  <button className="btn-outline" style={{ width: '100%' }} onClick={(e) => toggleHole(selectedHoleId, e as any)}>
+                    {holes.find(h => h.id === selectedHoleId)?.open ? 'Close Hole' : 'Open Hole'}
+                  </button>
+                  <button className="btn-danger" onClick={() => deleteHole(selectedHoleId)}>
+                    Remove
+                  </button>
+                </div>
+              </div>
+            ) : (
+              <div style={{ color: 'var(--muted-foreground)', fontSize: '0.875rem', textAlign: 'center', padding: '1rem' }}>
+                Select a hole to edit properties
+              </div>
+            )}
+          </div>
+        </div>
+      </main>
     </div>
   );
 }
@@ -275,8 +379,11 @@ function getNoteInfo(hz: number): { noteName: string, cents: number } {
   const noteIndex = (roundedSemitones + 69) % 12;
   const octave = Math.floor((roundedSemitones + 69) / 12) - 1;
 
+  // Handle negative index correctly
+  const normalizedIndex = noteIndex < 0 ? 12 + noteIndex : noteIndex;
+
   return {
-    noteName: `${notes[noteIndex < 0 ? 12 + noteIndex : noteIndex]}${octave}`,
+    noteName: `${notes[normalizedIndex]}${octave}`,
     cents
   };
 }
