@@ -29,9 +29,9 @@ impl Flute {
             holes: Vec::new(),
         }
     }
-
     /// Calculate input impedance at the embouchure for a given frequency
-    pub fn impedance_at(&self, freq: f64) -> Complex64 {
+    /// Assumes holes are already sorted back-to-front by find_resonance
+    fn impedance_at(&self, freq: f64) -> Complex64 {
         let omega = 2.0 * PI * freq;
         let k = omega / SPEED_OF_SOUND;
 
@@ -41,26 +41,13 @@ impl Flute {
         let z_char = Complex64::new(z_c, 0.0);
 
         // 1. Start at the foot (end of tube)
-        // Radiation impedance of open pipe end (approximation)
-        // Z_rad = j * rho * omega * 0.61 * r / (PI * r^2) ... simplified to end correction
-        // Better: Z_load = 0 (ideal open) + j * Z_c * tan(k * end_correction)
-        // Let's use the standard "open end" impedance Z ~ 0 for calculation,
-        // but adding the end correction length to the last section is cleaner.
-        // We will do explicit matrix calculation.
-
-        // Load impedance at the very end of the physical tube
         let mut z_in = Complex64::new(0.0, 0.0); // Ideally open
 
         // Iterate backwards from end of tube to embouchure
-        // Segments: (End -> Last Hole), (Hole), (Hole -> Prev Hole)... (First Hole -> Embouchure)
-
         let mut current_pos = self.length;
 
-        // Sort holes back-to-front
-        let mut sorted_holes = self.holes.clone();
-        sorted_holes.sort_by(|a, b| b.position.partial_cmp(&a.position).unwrap());
-
-        for hole in sorted_holes {
+        // Iterate over holes (which we assume are sorted back-to-front)
+        for hole in &self.holes {
             // A. Transmission line from current_pos back to hole.position
             let dist = current_pos - hole.position;
             if dist > 0.0 {
@@ -72,21 +59,29 @@ impl Flute {
             let z_hole = hole_impedance(hole.radius, self.wall_thickness, k);
 
             if hole.open {
-                // Open hole is in parallel with the bore impedance
-                // 1/Z_new = 1/Z_in + 1/Z_hole
-                // Z_new = (Z_in * Z_hole) / (Z_in + Z_hole)
-
-                // Avoid divide by zero if Z_hole is 0 (unlikely with corrections)
+                // Open hole: Parallel connection
+                // 1/Z_eq = 1/Z_in + 1/Z_hole => Z_eq = (Z_in * Z_hole) / (Z_in + Z_hole)
                 if z_hole.norm() < 1e-10 {
                     z_in = Complex64::new(0.0, 0.0);
                 } else {
                     z_in = (z_in * z_hole) / (z_in + z_hole);
                 }
             } else {
-                // Closed hole adds a small volume (compliance)
-                // For simplicity in V1 TMM, we can ignore closed hole volume or treat as infinite impedance
-                // Treating as infinite (open circuit) means it has no effect in parallel.
-                // TODO: Add closed hole compliance for higher accuracy.
+                // Closed hole: Acts as a compliance (small volume)
+                // V = Area * effective_height
+                // Z_compliance = 1 / (j * omega * C_a) where C_a = V / (rho * c^2)
+                // Z_closed = -j * (rho * c^2) / (omega * V)
+
+                let hole_area = PI * hole.radius.powi(2);
+                // Effective depth includes wall thickness + correction (approx same as open hole end correction)
+                let eff_depth = self.wall_thickness + 1.5 * hole.radius;
+                let volume = hole_area * eff_depth;
+
+                let stiffness = (AIR_DENSITY * SPEED_OF_SOUND.powi(2)) / volume;
+                // Z = -j * stiffness / omega
+                let z_closed = Complex64::new(0.0, -stiffness / omega);
+
+                z_in = (z_in * z_closed) / (z_in + z_closed);
             }
         }
 
@@ -100,15 +95,18 @@ impl Flute {
     }
 
     /// Find the resonance frequency closest to the target guess
-    pub fn find_resonance(&self, guess_freq: f64) -> f64 {
-        // Secant method or simple bisection/scan around guess
-        // We look for Im(Z_in) = 0.
+    pub fn find_resonance(&mut self, guess_freq: f64) -> f64 {
+        // Sort holes in-place (back-to-front) to avoid allocations
+        self.holes.sort_by(|a, b| {
+            b.position
+                .partial_cmp(&a.position)
+                .unwrap_or(std::cmp::Ordering::Equal)
+        });
 
+        // Secant method loop
         let _f0 = guess_freq * 0.8;
         let _f1 = guess_freq * 1.2;
 
-        // Narrow down a bit or just run Secant
-        // Let's iterate 20 times max
         let mut f_curr = guess_freq;
         let mut f_prev = guess_freq - 10.0;
 
@@ -125,9 +123,7 @@ impl Flute {
 
             let f_next = f_curr - y_curr * (f_curr - f_prev) / (y_curr - y_prev);
 
-            // Safety bounds to prevent divergence to negative or 0
             if f_next < 20.0 || f_next > 5000.0 {
-                // Reset if wild
                 f_prev = f_curr;
                 f_curr = (f_curr + guess_freq) / 2.0;
             } else {

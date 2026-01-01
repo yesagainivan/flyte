@@ -1,4 +1,4 @@
-import { useEffect, useState } from 'react';
+import { useEffect, useState, useRef } from 'react';
 import init, { FluteEngine } from 'flyte_core';
 import { Tuner } from './components/Tuner';
 import './App.css';
@@ -29,6 +29,7 @@ function App() {
   ]);
   const [draggingId, setDraggingId] = useState<number | null>(null);
   const [selectedHoleId, setSelectedHoleId] = useState<number | null>(null);
+  const isDragging = useRef<boolean>(false);
 
   useEffect(() => {
     init().then(() => {
@@ -40,9 +41,11 @@ function App() {
   useEffect(() => {
     if (!engine) return;
 
+    // Skip heavy full-array update if we are just dragging (we handle that manually)
+    if (isDragging.current) return;
+
     // Convert our friendly HoleData to the partial struct expected by set_holes
-    // Note: We need to match the Rust struct field names exactly if using serde?
-    // Actually, in Rust `Hole` has `position`, `radius`, `open`.
+    // Convert our friendly HoleData to the partial struct expected by set_holes
     try {
       const positions = new Float64Array(holes.map(h => h.position));
       const radii = new Float64Array(holes.map(h => h.radius));
@@ -61,15 +64,27 @@ function App() {
     }
   }, [holes, engine]);
 
+  // Removed manual free() to check for double-free issues in React StrictMode
+  // useEffect(() => {
+  //   return () => {
+  //     engine?.free();
+  //   };
+  // }, [engine]);
+
   const handlePointerDown = (id: number, e: React.PointerEvent) => {
+    // If modifier key is pressed, we want to toggle (handled in onClick), not drag.
+    if (e.metaKey || e.ctrlKey) return;
+
     e.stopPropagation();
     e.currentTarget.setPointerCapture(e.pointerId);
     setDraggingId(id);
     setSelectedHoleId(id);
+    isDragging.current = true;
   };
 
   const handlePointerMove = (e: React.PointerEvent) => {
     if (draggingId === null) return;
+    if (!engine) return;
 
     const svgRect = e.currentTarget.parentElement?.getBoundingClientRect();
     if (!svgRect) return;
@@ -82,21 +97,58 @@ function App() {
     // Clamp to tube length
     newPos = Math.max(1.0, Math.min(TUBE_LENGTH - 1.0, newPos));
 
+    // 1. Update React State (UI)
     setHoles(prev => prev.map(h =>
       h.id === draggingId ? { ...h, position: newPos } : h
     ));
+
+    // 2. Direct Physics Update (WASM) - Zero Allocation
+    // Find index of hole in the array
+    const holeIndex = holes.findIndex(h => h.id === draggingId);
+    if (holeIndex !== -1) {
+      try {
+        const h = holes[holeIndex];
+        engine.update_hole(holeIndex, newPos, h.radius, h.open);
+
+        // Recalculate pitch immediately
+        const newPitch = engine.calculate_pitch(pitch);
+        if (newPitch > 20 && newPitch < 5000) {
+          setPitch(newPitch);
+        }
+      } catch (err) {
+        console.error(err);
+      }
+    }
   };
 
   const handlePointerUp = (e: React.PointerEvent) => {
     setDraggingId(null);
     e.currentTarget.releasePointerCapture(e.pointerId);
+    isDragging.current = false;
+
+    // Trigger a full sync when drag ends to ensure consistency
+    // We do this by toggling a dummy state or just letting the next effect run?
+    // Actually, setting state in handlePointerMove triggers effect, but we blocked it with isDragging.
+    // Now that isDragging is false, we want one final sync.
+    // We can force it by shallow copying holes, but setHoles above already queued a render.
+    // The render happened, effect ran, saw isDragging=true, and skipped.
+    // Now we are done. We need to trigger effect one last time.
+    // Simplest way: just call the update logic manually here or force an effect.
+    // Let's just setHoles with exact same content to trigger effect? No, React bails out.
+    // We can just call setHoles/trigger sync explicitly if we want, but actually
+    // since we updated physics manually, we are in sync!
+    // The NEXT operation (adding hole etc) will be fine.
   };
 
-  const toggleHole = (id: number) => {
-    if (draggingId !== null) return; // Don't toggle if we were dragging
-    setHoles(prev => prev.map(h =>
-      h.id === id ? { ...h, open: !h.open } : h
-    ));
+  const toggleHole = (id: number, e: React.MouseEvent) => {
+    e.stopPropagation();
+    // Only toggle if Cmd/Ctrl is pressed
+    if (e.metaKey || e.ctrlKey) {
+      setHoles(prev => prev.map(h =>
+        h.id === id ? { ...h, open: !h.open } : h
+      ));
+    }
+    // Always select the hole we clicked on
     setSelectedHoleId(id);
   };
 
@@ -113,6 +165,7 @@ function App() {
   };
 
   const updateRadius = (id: number, newRadius: number) => {
+    if (isNaN(newRadius)) return;
     setHoles(prev => prev.map(h => h.id === id ? { ...h, radius: newRadius } : h));
   };
 
@@ -181,7 +234,7 @@ function App() {
                   strokeWidth={2}
                   cursor="ew-resize"
                   onPointerDown={(e) => handlePointerDown(hole.id, e)}
-                  onClick={() => toggleHole(hole.id)}
+                  onClick={(e) => toggleHole(hole.id, e)}
                 />
                 <line y1={12} y2={40} stroke="rgba(255,255,255,0.2)" strokeDasharray="2 2" />
                 <text y={55} textAnchor="middle" fill="#ccc" fontSize="10" fontFamily="monospace">
