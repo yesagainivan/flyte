@@ -21,7 +21,9 @@ export class AudioEngine {
 
     private init() {
         if (!this.ctx) {
-            this.ctx = new (window.AudioContext || (window as any).webkitAudioContext)();
+            const Win = window as unknown as Window & { webkitAudioContext: typeof AudioContext };
+            const AudioContextClass = window.AudioContext || Win.webkitAudioContext;
+            this.ctx = new AudioContextClass();
         }
     }
 

@@ -92,7 +92,7 @@ function App() {
     } catch (e) {
       console.error("Error updating physics engine:", e);
     }
-  }, [holes, engine, jetVelocity]);
+  }, [holes, engine, jetVelocity, audioEngine, isPlaying]);
 
   // Event Handlers
   const handlePointerDown = (id: number, e: React.PointerEvent) => {
