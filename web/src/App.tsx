@@ -18,6 +18,7 @@ function App() {
   const [pitch, setPitch] = useState<number>(0);
   const [toast, setToast] = useState<ToastMessage | null>(null);
   const [isPlaying, setIsPlaying] = useState(false);
+  const [volume, setVolume] = useState(0.5);
 
   // Audio Engine
   const audioEngine = useMemo(() => new AudioEngine(), []);
@@ -143,18 +144,18 @@ function App() {
     isDragging.current = false;
   };
 
-  const toggleHole = (id: number, e: React.MouseEvent) => {
+  const toggleHoleState = (id: number) => {
+    setHoles(prev => prev.map(h =>
+      h.id === id ? { ...h, open: !h.open } : h
+    ));
+  };
+
+  const handleHoleClick = (id: number, e: React.MouseEvent) => {
     e.stopPropagation();
     if (e.metaKey || e.ctrlKey) {
-      setHoles(prev => prev.map(h =>
-        h.id === id ? { ...h, open: !h.open } : h
-      ));
+      toggleHoleState(id);
     }
     setSelectedHoleId(id);
-
-    // Trigger update for audio if playing (since toggle affects pitch)
-    // The main effect handles the pitch update, but we might want immediate feedback if needed.
-    // However, the setHoles will trigger the effect which updates pitch and then updates audio.
   };
 
   const addHole = () => {
@@ -349,7 +350,7 @@ function App() {
                   strokeWidth={2}
                   cursor="col-resize"
                   onPointerDown={(e) => handlePointerDown(hole.id, e)}
-                  onClick={(e) => toggleHole(hole.id, e)}
+                  onClick={(e) => handleHoleClick(hole.id, e)}
                   filter={selectedHoleId === hole.id ? "url(#glow)" : undefined}
                 />
 
@@ -383,23 +384,43 @@ function App() {
           <div className="card">
             <div className="card-header">
               <h3 className="card-title">Real-time Analysis</h3>
-              <div style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
-                <button
-                  className={isPlaying ? "btn-primary" : "btn-outline"}
-                  style={{ fontSize: '0.75rem', height: '1.5rem', padding: '0 8px' }}
-                  onClick={() => {
-                    const newPlaying = !isPlaying;
-                    setIsPlaying(newPlaying);
-                    if (newPlaying) {
-                      audioEngine.play(pitch);
-                    } else {
-                      audioEngine.stop();
-                    }
-                  }}
-                >
-                  {isPlaying ? "Stop Tone" : "Play Tone"}
-                </button>
-                <div className={`status-indicator ${isPlaying ? 'active' : ''}`}></div>
+              <div style={{ display: 'flex', alignItems: 'center', gap: '16px' }}>
+                <div style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
+                  <button
+                    className={isPlaying ? "btn-primary" : "btn-outline"}
+                    style={{ fontSize: '0.75rem', height: '1.5rem', padding: '0 8px', minWidth: '80px' }}
+                    onClick={() => {
+                      const newPlaying = !isPlaying;
+                      setIsPlaying(newPlaying);
+                      if (newPlaying) {
+                        audioEngine.setVolume(volume);
+                        audioEngine.play(pitch);
+                      } else {
+                        audioEngine.stop();
+                      }
+                    }}
+                  >
+                    {isPlaying ? "Stop Tone" : "Play Tone"}
+                  </button>
+                  <div className={`status-indicator ${isPlaying ? 'active' : ''}`}></div>
+                </div>
+
+                <div style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
+                  <span style={{ fontSize: '0.75rem', color: 'var(--muted-foreground)' }}>Vol</span>
+                  <input
+                    type="range"
+                    min="0"
+                    max="1"
+                    step="0.01"
+                    value={volume}
+                    onChange={(e) => {
+                      const v = parseFloat(e.target.value);
+                      setVolume(v);
+                      audioEngine.setVolume(v);
+                    }}
+                    style={{ width: '80px', height: '4px' }}
+                  />
+                </div>
               </div>
             </div>
 
@@ -478,7 +499,7 @@ function App() {
                   />
                 </div>
                 <div style={{ display: 'flex', gap: '0.5rem', marginTop: '1rem' }}>
-                  <button className="btn-outline" style={{ width: '100%' }} onClick={(e) => toggleHole(selectedHoleId, e)}>
+                  <button className="btn-outline" style={{ width: '100%' }} onClick={() => toggleHoleState(selectedHoleId)}>
                     {holes.find(h => h.id === selectedHoleId)?.open ? 'Close Hole' : 'Open Hole'}
                   </button>
                   <button className="btn-danger" onClick={() => deleteHole(selectedHoleId)}>
