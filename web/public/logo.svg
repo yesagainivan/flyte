@@ -2,15 +2,15 @@
   <!-- Bauhaus F: Geometric Construction -->
   
   <!-- Main Vertical Block (The Stem) -->
-  <rect x="25" y="15" width="20" height="70" fill="#171717" />
+  <rect x="25" y="15" width="20" height="70" fill="#f7f3ebff" />
   
   <!-- Top Horizontal Block (The Arm) -->
-  <rect x="45" y="15" width="35" height="20" fill="#171717" />
+  <rect x="45" y="15" width="35" height="20" fill="#f7f3ebff" />
   
   <!-- The Crossbar expressed as a Circle (The Note/Hole) -->
   <circle cx="60" cy="55" r="12" fill="#ea580c" />
   
   <!-- Small detail to align -->
-  <rect x="45" y="48" width="5" height="14" fill="#171717" />
+  <rect x="45" y="48" width="5" height="14" fill="#f7f3ebff" />
 
 </svg>
