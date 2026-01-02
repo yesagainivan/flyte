@@ -1,7 +1,8 @@
-import { useEffect, useState, useRef } from 'react';
+import { useEffect, useState, useRef, useMemo } from 'react';
 import init, { FluteEngine } from 'flyte_core';
 import './App.css';
 import { Toast, type ToastMessage } from './components/Toast';
+import { AudioEngine } from './audio/AudioEngine';
 
 interface HoleData {
   id: number;
@@ -16,6 +17,10 @@ function App() {
   const [engine, setEngine] = useState<FluteEngine | null>(null);
   const [pitch, setPitch] = useState<number>(0);
   const [toast, setToast] = useState<ToastMessage | null>(null);
+  const [isPlaying, setIsPlaying] = useState(false);
+
+  // Audio Engine
+  const audioEngine = useMemo(() => new AudioEngine(), []);
 
   // Physics Parameters State
   const [tubeLength, setTubeLength] = useState<number>(60.0);
@@ -80,6 +85,7 @@ function App() {
       if (newPitch > 20 && newPitch < 5000) {
         // eslint-disable-next-line react-hooks/set-state-in-effect
         setPitch(newPitch);
+        if (isPlaying) audioEngine.update(newPitch);
       }
     } catch (e) {
       console.error("Error updating physics engine:", e);
@@ -121,7 +127,10 @@ function App() {
         const h = holes[holeIndex];
         engine.update_hole(holeIndex, newPos, h.radius, h.open);
         const newPitch = engine.calculate_pitch(440);
-        if (newPitch > 20 && newPitch < 5000) setPitch(newPitch);
+        if (newPitch > 20 && newPitch < 5000) {
+          setPitch(newPitch);
+          if (isPlaying) audioEngine.update(newPitch);
+        }
       } catch (err) {
         console.error("Crash during drag:", err);
       }
@@ -142,6 +151,10 @@ function App() {
       ));
     }
     setSelectedHoleId(id);
+
+    // Trigger update for audio if playing (since toggle affects pitch)
+    // The main effect handles the pitch update, but we might want immediate feedback if needed.
+    // However, the setHoles will trigger the effect which updates pitch and then updates audio.
   };
 
   const addHole = () => {
@@ -370,7 +383,24 @@ function App() {
           <div className="card">
             <div className="card-header">
               <h3 className="card-title">Real-time Analysis</h3>
-              <div className="status-indicator active"></div>
+              <div style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
+                <button
+                  className={isPlaying ? "btn-primary" : "btn-outline"}
+                  style={{ fontSize: '0.75rem', height: '1.5rem', padding: '0 8px' }}
+                  onClick={() => {
+                    const newPlaying = !isPlaying;
+                    setIsPlaying(newPlaying);
+                    if (newPlaying) {
+                      audioEngine.play(pitch);
+                    } else {
+                      audioEngine.stop();
+                    }
+                  }}
+                >
+                  {isPlaying ? "Stop Tone" : "Play Tone"}
+                </button>
+                <div className={`status-indicator ${isPlaying ? 'active' : ''}`}></div>
+              </div>
             </div>
 
             <div className="pitch-display">
