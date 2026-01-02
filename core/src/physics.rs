@@ -11,6 +11,13 @@ pub struct Flute {
     pub bore_radius: f64,    // cm
     pub wall_thickness: f64, // cm
     pub holes: Vec<Hole>,
+    // New fields for higher accuracy
+    #[serde(default)]
+    pub cork_position: f64, // Distance from embouchure center to cork (cm). Default ~1.7
+    #[serde(default)]
+    pub embouchure_hole_radius: f64, // cm. Default ~0.5
+    #[serde(default)]
+    pub embouchure_chimney: f64, // Height of chimney (lip plate) cm. Default ~0.5
 }
 
 #[derive(Serialize, Deserialize, Debug, Clone)]
@@ -27,23 +34,42 @@ impl Flute {
             bore_radius,
             wall_thickness,
             holes: Vec::new(),
+            cork_position: 1.7,
+            embouchure_hole_radius: 0.5,
+            embouchure_chimney: 0.5,
         }
     }
     /// Calculate input impedance at the embouchure for a given frequency
     /// Assumes holes are already sorted back-to-front by find_resonance
     fn impedance_at(&self, freq: f64, holes: &[Hole]) -> Complex64 {
         let omega = 2.0 * PI * freq;
-        let k = omega / SPEED_OF_SOUND;
+
+        // Viscothermal losses
+        // Alpha approx 1.2e-5 * sqrt(f) / radius_cm (N.B. check units, standard is per meter)
+        // Let's use a standard approximation for wide tubes:
+        // k = w/c - j * alpha
+        let alpha = (1.2e-5 * freq.sqrt()) / self.bore_radius;
+        let real_k = omega / SPEED_OF_SOUND;
+        // Complex wavenumber k
+        let k = Complex64::new(real_k, -alpha);
 
         // Z_c = rho * c / Area
         let bore_area = PI * self.bore_radius.powi(2);
-        let z_c = (AIR_DENSITY * SPEED_OF_SOUND) / bore_area;
-        let z_char = Complex64::new(z_c, 0.0);
+        let z_c_val = (AIR_DENSITY * SPEED_OF_SOUND) / bore_area;
+        let z_char = Complex64::new(z_c_val, 0.0);
 
-        // 1. Start at the foot (end of tube)
-        let mut z_in = Complex64::new(0.0, 0.0); // Ideally open
+        // 1. Start at the foot (end of tube) with Radiation Impedance
+        // Z_rad for unflanged pipe approx:
+        // ka = k * r
+        // Z_rad = Z_c * (0.25*(ka)^2 + j*0.61*ka)
+        let ka = real_k * self.bore_radius;
+        let z_rad_foot = z_char * Complex64::new(0.25 * ka.powi(2), 0.61 * ka);
+
+        // Load at the end is the radiation impedance
+        let mut z_in = z_rad_foot;
 
         // Iterate backwards from end of tube to embouchure
+        // Note: self.length is typically "embouchure to foot" physical length.
         let mut current_pos = self.length;
 
         // Iterate over holes (which we assume are sorted back-to-front)
@@ -56,31 +82,37 @@ impl Flute {
             current_pos = hole.position;
 
             // B. Shunt impedance of the hole
-            let z_hole = hole_impedance(hole.radius, self.wall_thickness, k);
+            // For open hole, we also use a radiation impedance model if possible,
+            // but the basic inertance model with end correction is robust enough for now.
+            // We can add a resistance term to z_hole for radiation damping?
+            // Z_hole_rad = (rho * c / A_hole) * (0.25 (ka_hole)^2)  (Resistance part)
+
+            let hole_area = PI * hole.radius.powi(2);
+            let mut z_hole = hole_impedance(hole.radius, self.wall_thickness, real_k);
+
+            // Add radiation resistance to open hole
+            if hole.open {
+                let ka_hole = real_k * hole.radius;
+                let hole_rad_res =
+                    ((AIR_DENSITY * SPEED_OF_SOUND) / hole_area) * 0.25 * ka_hole.powi(2);
+                z_hole = z_hole + Complex64::new(hole_rad_res, 0.0);
+            }
 
             if hole.open {
                 // Open hole: Parallel connection
-                // 1/Z_eq = 1/Z_in + 1/Z_hole => Z_eq = (Z_in * Z_hole) / (Z_in + Z_hole)
                 if z_hole.norm() < 1e-10 {
                     z_in = Complex64::new(0.0, 0.0);
                 } else {
                     z_in = (z_in * z_hole) / (z_in + z_hole);
                 }
             } else {
-                // Closed hole: Acts as a compliance (small volume)
-                // V = Area * effective_height
-                // Z_compliance = 1 / (j * omega * C_a) where C_a = V / (rho * c^2)
-                // Z_closed = -j * (rho * c^2) / (omega * V)
-
+                // Closed hole
+                // Calculate compliance as before...
                 let hole_area = PI * hole.radius.powi(2);
-                // Effective depth includes wall thickness + correction (approx same as open hole end correction)
-                let eff_depth = self.wall_thickness + 1.5 * hole.radius;
+                let eff_depth = self.wall_thickness + 1.5 * hole.radius; // Kept basic for now
                 let volume = hole_area * eff_depth;
-
                 let stiffness = (AIR_DENSITY * SPEED_OF_SOUND.powi(2)) / volume;
-                // Z = -j * stiffness / omega
                 let z_closed = Complex64::new(0.0, -stiffness / omega);
-
                 z_in = (z_in * z_closed) / (z_in + z_closed);
             }
         }
@@ -91,7 +123,72 @@ impl Flute {
             z_in = transmission_line_impedance(z_in, z_char, k, dist);
         }
 
-        z_in
+        // --- EMBOUCHURE JOINT CORRECTION ---
+        // At pos=0, we have the "Main Bore" input impedance z_in.
+        // But we also have:
+        // 1. The Cork Cavity (a closed tube of length 'cork_position' upstream) => Shunt Z_cork
+        // 2. The Embouchure Hole (an inertance + radiation R leaking to outside) => Shunt Z_emb
+
+        // Z_cork (Closed stub)
+        // Z_cork = -j * Z_c * cot(k * L_cork)
+        // transmission_line_impedance with Load=Infinity?
+        // Easier: Z_input_closed_stub = Z_c / (j tan(kL)) = -j Z_c cot(kL)
+        let z_cork_stub = -Complex64::i() * z_char / (k * self.cork_position).tan();
+
+        // Z_emb (Embouchure hole impedance)
+        // Similar to a tone hole: inertance + radiation
+        // L = rho * t_eff / A
+        // t_eff ~ chimney + correction. Benade suggests "equivalent length" ~5cm?
+        // Let's use physical calculation:
+        let emb_area = PI * self.embouchure_hole_radius.powi(2);
+        // End corrections for embouchure hole (approximate)
+        let emb_t_eff = self.embouchure_chimney + 1.5 * self.embouchure_hole_radius;
+
+        // Radiation R for embouchure
+        let ka_emb = real_k * self.embouchure_hole_radius;
+        let emb_rad_res = ((AIR_DENSITY * SPEED_OF_SOUND) / emb_area) * 0.25 * ka_emb.powi(2);
+
+        let emb_inertance = (AIR_DENSITY * emb_t_eff) / emb_area;
+        let z_emb = Complex64::new(emb_rad_res, omega * emb_inertance);
+
+        // Total Impedance seen by the flow drive:
+        // Parallel of (Bore, Cork, EmbouchureHole)
+        // 1/Z_total = 1/Z_bore + 1/Z_cork + 1/Z_emb
+        // But wait! We look for resonance of the PIPE.
+        // The condition for resonance is Im(Y_total) = 0?
+        // Flutes play at minima of Input Impedance *of the bore*?
+        // No, the jet drives the whole system. The resonance frequencies are the poles of the admittance (zeros of impedance) seen by the jet.
+        // So we want Z_total to be minimal (Admittance maximal)?
+        // Actually, Benade states: "The playing frequency is close to the frequency where the sum of admittances of the main bore, the cork cavity, and the embouchure hole is zero." (Im(Y_sum) = 0).
+
+        let y_bore = if z_in.norm() < 1e-10 {
+            Complex64::new(1e10, 0.0)
+        } else {
+            1.0 / z_in
+        };
+        let y_cork = if z_cork_stub.norm() < 1e-10 {
+            Complex64::new(1e10, 0.0)
+        } else {
+            1.0 / z_cork_stub
+        };
+        let y_emb = if z_emb.norm() < 1e-10 {
+            Complex64::new(1e10, 0.0)
+        } else {
+            1.0 / z_emb
+        };
+
+        let y_total = y_bore + y_cork + y_emb;
+
+        // We return Z_total = 1/Y_total.
+        // If Y_total is large (resonance), Z_total is small.
+        // find_resonance looks for Z.im crossing 0.
+        // If Im(Y) = 0, then Im(1/Y) = -Im(Y)/|Y|^2 = 0. So checking Z.im is equivalent to checking Y.im (mostly).
+
+        if y_total.norm() < 1e-10 {
+            Complex64::new(1e10, 1e10)
+        } else {
+            1.0 / y_total
+        }
     }
 
     /// Find the resonance frequency closest to the target guess
@@ -148,11 +245,12 @@ impl Flute {
 fn transmission_line_impedance(
     z_load: Complex64,
     z_char: Complex64,
-    k: f64,
+    k: Complex64,
     len: f64,
 ) -> Complex64 {
-    let tan_kl = (k * len).tan();
-    let j_tan = Complex64::new(0.0, tan_kl);
+    let kl = k * len;
+    let tan_kl = kl.tan();
+    let j_tan = Complex64::new(0.0, 1.0) * tan_kl;
 
     let numer = z_load + z_char * j_tan;
     let denom = z_char + z_load * j_tan;
@@ -220,5 +318,24 @@ mod tests {
         assert_eq!(flute.holes[0].position, 10.0, "Hole 0 moved!");
         assert_eq!(flute.holes[1].position, 30.0, "Hole 1 moved!");
         assert_eq!(flute.holes[2].position, 20.0, "Hole 2 moved!");
+    }
+
+    #[test]
+    fn test_pitch_predictions() {
+        let bore_radius = 0.95; // 19mm / 2
+        let _wall_thickness = 0.04; // 0.4mm? Wait, 0.4 in the other test.
+                                    // Note: 0.04 cm is 0.4mm.
+
+        // C4 Check (~261 Hz)
+        // Theoretical half-wave length: 34500 / 261 / 2 = 66.09 cm
+        let mut flute_c4 = Flute::new(66.1, bore_radius, 0.4);
+        let freq_c4 = flute_c4.find_resonance(261.0);
+        println!("C4 (66.1cm): {:.2} Hz (Expected ~261)", freq_c4);
+
+        // A4 Check (~440 Hz)
+        // Theoretical half-wave length: 34500 / 440 / 2 = 39.20 cm
+        let mut flute_a4 = Flute::new(39.2, bore_radius, 0.4);
+        let freq_a4 = flute_a4.find_resonance(440.0);
+        println!("A4 (39.2cm): {:.2} Hz (Expected ~440)", freq_a4);
     }
 }
