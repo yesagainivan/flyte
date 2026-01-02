@@ -27,6 +27,7 @@ function App() {
   const [tubeLength, setTubeLength] = useState<number>(60.0);
   const [boreRadius, setBoreRadius] = useState<number>(0.95);
   const [wallThickness, setWallThickness] = useState<number>(0.4);
+  const [jetVelocity, setJetVelocity] = useState<number>(3700); // cm/s
 
   // Holes State
   const [holes, setHoles] = useState<HoleData[]>([
@@ -62,13 +63,13 @@ function App() {
       engine.set_physics_params(tubeLength, boreRadius, wallThickness);
       // Trigger a recalc - we can use an internal guess or the last known pitch
       // Passing 0 or a fixed value lets the engine use its robust guess
-      const newPitch = engine.calculate_pitch(440);
+      const newPitch = engine.calculate_pitch(jetVelocity);
       // eslint-disable-next-line react-hooks/set-state-in-effect
       if (newPitch > 20 && newPitch < 5000) setPitch(newPitch);
     } catch (e) {
       console.error("Error updating physics params:", e);
     }
-  }, [tubeLength, boreRadius, wallThickness, engine]);
+  }, [tubeLength, boreRadius, wallThickness, jetVelocity, engine]);
 
   // Update Holes
   useEffect(() => {
@@ -82,7 +83,7 @@ function App() {
 
       engine.set_holes(positions, radii, open);
 
-      const newPitch = engine.calculate_pitch(440);
+      const newPitch = engine.calculate_pitch(jetVelocity);
       if (newPitch > 20 && newPitch < 5000) {
         // eslint-disable-next-line react-hooks/set-state-in-effect
         setPitch(newPitch);
@@ -91,7 +92,7 @@ function App() {
     } catch (e) {
       console.error("Error updating physics engine:", e);
     }
-  }, [holes, engine]);
+  }, [holes, engine, jetVelocity]);
 
   // Event Handlers
   const handlePointerDown = (id: number, e: React.PointerEvent) => {
@@ -127,7 +128,7 @@ function App() {
       try {
         const h = holes[holeIndex];
         engine.update_hole(holeIndex, newPos, h.radius, h.open);
-        const newPitch = engine.calculate_pitch(440);
+        const newPitch = engine.calculate_pitch(jetVelocity);
         if (newPitch > 20 && newPitch < 5000) {
           setPitch(newPitch);
           if (isPlaying) audioEngine.update(newPitch);
@@ -446,6 +447,21 @@ function App() {
               <h3 className="card-title">Tube Dimensions</h3>
             </div>
             <div className="properties-grid">
+              <div className="control-group">
+                <label>Jet Velocity (cm/s)</label>
+                <input
+                  type="range"
+                  min="500"
+                  max="6000"
+                  step="100"
+                  value={jetVelocity}
+                  onChange={(e) => setJetVelocity(parseFloat(e.target.value))}
+                  style={{ width: '100%' }}
+                />
+                <div style={{ fontSize: '0.75rem', color: 'var(--muted-foreground)', marginTop: '4px' }}>
+                  {jetVelocity} cm/s
+                </div>
+              </div>
               <div className="control-group">
                 <label>Total Length (cm)</label>
                 <input

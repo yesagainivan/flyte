@@ -99,7 +99,7 @@ impl FluteEngine {
 
     /// Calculate pitch using TMM and Resonance search
     /// Uses a smart guess based on the first open hole to ensure we find the fundamental
-    pub fn calculate_pitch(&mut self, _ignored_guess_hz: f64) -> f64 {
+    pub fn calculate_pitch(&mut self, jet_velocity: f64) -> f64 {
         // Find the effective length based on the first open hole (closest to embouchure, pos 0)
         // Holes are sorted by position in find_resonance, but here we just need a scan.
         // We want the hole with the smallest position that is open.
@@ -116,7 +116,33 @@ impl FluteEngine {
         let effective_len = shortest_len + 0.61 * self.inner.bore_radius;
 
         // Fundamental of open-open pipe: f = c / 2L
-        let robust_guess = 34500.0 / (2.0 * effective_len);
+        let fundamental_guess = 34500.0 / (2.0 * effective_len);
+
+        // Aerodynamic Preferred Frequency (f_pref)
+        // f_pref ~ 0.2 * U / l
+        // U = jet_velocity (cm/s)
+        // l = cutting distance (approx diameter of embouchure hole or similar)
+        // Let's approximate cutting distance as 2 * embouchure_radius (~1.0 cm typically)
+
+        let guess_freq = if jet_velocity > 10.0 {
+            let cutting_dist = 2.0 * self.inner.embouchure_hole_radius;
+            let f_pref = 0.2 * jet_velocity / cutting_dist;
+
+            // We want to find the resonance closest to this preferred frequency
+            // But we should be careful. If the preferred frequency is very far off, we might want to still bias towards the fundamental
+            // For now, let's just use f_pref as the guess if it's substantial.
+            f_pref
+        } else {
+            fundamental_guess
+        };
+
+        // If the calculated preferred frequency is wildly different (e.g. very low velocity),
+        // we might get 0 Hz. Fallback to fundamental if guess is too low.
+        let robust_guess = if guess_freq < 20.0 {
+            fundamental_guess
+        } else {
+            guess_freq
+        };
 
         self.inner.find_resonance(robust_guess)
     }

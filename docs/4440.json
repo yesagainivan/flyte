@@ -1,0 +1,53 @@
+{
+  "version": 1,
+  "timestamp": "2026-01-02T03:21:55.816Z",
+  "params": {
+    "tubeLength": 38.12,
+    "boreRadius": 0.85,
+    "wallThickness": 0.45
+  },
+  "holes": [
+    {
+      "id": 1,
+      "position": 17.273958333333333,
+      "radius": 0.31,
+      "open": false
+    },
+    {
+      "id": 2,
+      "position": 19.606770833333332,
+      "radius": 0.3,
+      "open": false
+    },
+    {
+      "id": 3,
+      "position": 22.363020833333334,
+      "radius": 0.3,
+      "open": false
+    },
+    {
+      "id": 4,
+      "position": 25.229947916666667,
+      "radius": 0.23,
+      "open": false
+    },
+    {
+      "id": 5,
+      "position": 27.771875,
+      "radius": 0.37,
+      "open": false
+    },
+    {
+      "id": 6,
+      "position": 29.567708333333332,
+      "radius": 0.246,
+      "open": false
+    },
+    {
+      "id": 7,
+      "position": 18.31640625,
+      "radius": 0.06,
+      "open": false
+    }
+  ]
+}
